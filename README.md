@@ -27,14 +27,11 @@ git push -u origin main
 
 ### 4. Deploy automatico
 Il workflow si avvia automaticamente ad ogni push su `main`.
-L'app sarà disponibile su:
-```
-https://TUO_UTENTE.github.io/errori-checker/
-```
+
 
 ---
 
-## ⚠️ Se il nome del repository è diverso da `errori-checker`
+## Se il nome del repository è diverso da `errori-checker`
 
 Modifica `vite.config.js`:
 ```js
@@ -49,7 +46,7 @@ npm run dev
 ```
 
 ## Funzionalità
-- Carica il file `Errori_table_normalizado.xlsx`
+- Carica il file di esempio nel repo `Errori_table_normalizado.xlsx`
 - Assegna stati a ogni errore: Pendente / In revisione / Fatto / Non eseguibile
 - I progressi vengono salvati nel browser (localStorage)
 - Filtra per stato, cerca per ID catalogo
