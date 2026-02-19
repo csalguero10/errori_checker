@@ -1,19 +1,432 @@
 <!DOCTYPE html>
 <html lang="it">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Errori Checker</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <style>
-      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #0F0F0F; }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Errori Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'DM Mono', 'Courier New', monospace;
+      background: #0F0F0F;
+      color: #E8E8E0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    #header {
+      background: #1A1A1A;
+      border-bottom: 1px solid #2A2A2A;
+      padding: 13px 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-shrink: 0;
+    }
+    .logo { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: #555; font-weight: 600; flex-shrink: 0; }
+    .logo span { color: #E8E8E0; }
+    #progress-wrap { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 160px; }
+    #bar-track { flex: 1; height: 3px; background: #2A2A2A; border-radius: 2px; }
+    #bar-fill { height: 100%; background: #86EFAC; border-radius: 2px; width: 0; transition: width .5s ease; }
+    #pct-text { font-size: 11px; color: #555; min-width: 34px; text-align: right; }
+    #total-text { font-size: 11px; color: #333; white-space: nowrap; }
+    .hbtn {
+      background: transparent; border: 1px solid #2A2A2A; color: #666;
+      padding: 6px 14px; border-radius: 5px; cursor: pointer; font-size: 11px;
+      font-family: inherit; letter-spacing: .07em; text-transform: uppercase;
+      transition: border-color .15s, color .15s;
+    }
+    .hbtn:hover { color: #aaa; border-color: #444; }
+    .hbtn.primary { color: #C8C8C0; border-color: #444; }
+    #file-name { font-size: 11px; color: #333; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #header-controls { display: none; align-items: center; gap: 10px; }
+
+    /* ── BODY ── */
+    #body { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: 270px; min-width: 270px;
+      background: #141414; border-right: 1px solid #1E1E1E;
+      display: none; flex-direction: column; overflow: hidden;
+    }
+    #sidebar.visible { display: flex; }
+    #sidebar-top { padding: 14px 12px 10px; border-bottom: 1px solid #1E1E1E; }
+    #search-input {
+      width: 100%; background: #1C1C1C; border: 1px solid #2A2A2A;
+      border-radius: 6px; color: #D0D0C8; padding: 7px 10px; font-size: 12px;
+      outline: none; font-family: inherit; margin-bottom: 8px;
+    }
+    #filter-row { display: flex; gap: 4px; }
+    .filter-btn {
+      font-size: 10px; padding: 3px 9px; border-radius: 4px; border: 1px solid #2A2A2A;
+      cursor: pointer; font-family: inherit; letter-spacing: .05em;
+      background: transparent; color: #555; transition: all .15s;
+    }
+    .filter-btn.active { background: #E8E8E0; color: #0F0F0F; border-color: #E8E8E0; }
+    #catalog-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+    .cat-item {
+      padding: 10px 14px; cursor: pointer;
+      border-left: 3px solid transparent; transition: background .1s;
+    }
+    .cat-item:hover { background: #1A1A1A; }
+    .cat-item.active { background: #1E1E1E; border-left-color: #86EFAC; }
+    .cat-id { font-size: 11px; color: #D0D0C8; letter-spacing: .04em; margin-bottom: 5px; }
+    .cat-mini { display: flex; align-items: center; gap: 6px; }
+    .mini-dots { display: flex; gap: 3px; flex-wrap: wrap; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: #333; display: inline-block; }
+    .cat-count { font-size: 10px; color: #444; }
+
+    /* ── MAIN ── */
+    #main { flex: 1; overflow-y: auto; padding: 32px 40px; }
+
+    /* Upload */
+    #upload-zone {
+      margin: 80px auto; max-width: 420px;
+      border: 2px dashed #222; border-radius: 14px;
+      padding: 52px 36px; text-align: center;
+    }
+    .upload-icon { font-size: 36px; margin-bottom: 16px; }
+    .upload-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; letter-spacing: .04em; }
+    .upload-sub { font-size: 12px; color: #444; margin-bottom: 28px; line-height: 1.8; }
+    .upload-btn {
+      display: inline-block; background: #E8E8E0; color: #0F0F0F;
+      border: none; padding: 11px 26px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; font-family: inherit; letter-spacing: .09em;
+      text-transform: uppercase; font-weight: 700;
+    }
+
+    /* Catalog view */
+    #cat-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 12px; }
+    #cat-title { font-size: 20px; font-weight: 700; letter-spacing: .05em; margin-bottom: 4px; }
+    #cat-sub { font-size: 11px; color: #555; }
+    #error-list { }
+
+    .error-card {
+      background: #161616; border: 1px solid #222; border-radius: 8px;
+      padding: 14px 18px; margin-bottom: 8px;
+      display: flex; align-items: flex-start; gap: 14px;
+      transition: opacity .2s, border-color .2s;
+    }
+    .error-card.done { opacity: .5; border-color: #14532D44; }
+    .err-num {
+      min-width: 26px; height: 26px; border-radius: 50%;
+      background: #1E1E1E; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #444; font-weight: 700; flex-shrink: 0; margin-top: 2px;
+    }
+    .err-text { flex: 1; font-size: 12px; line-height: 1.7; color: #B0B0A8; font-family: 'DM Mono', monospace; word-break: break-word; }
+    .err-text.done { text-decoration: line-through; color: #3A3A3A; }
+    .status-col { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+    .status-badge {
+      font-size: 10px; padding: 3px 10px; border-radius: 20px;
+      font-weight: 700; letter-spacing: .05em; white-space: nowrap;
+    }
+    .badge-pending  { background: #FEF3C7; color: #F59E0B; }
+    .badge-reviewing{ background: #EEF2FF; color: #6366F1; }
+    .badge-done     { background: #D1FAE5; color: #059669; }
+    .badge-impossible{ background: #FEE2E2; color: #DC2626; }
+
+    .status-select {
+      background: #1E1E1E; border: 1px solid #2A2A2A; color: #777;
+      border-radius: 5px; padding: 4px 8px; font-size: 11px;
+      font-family: inherit; cursor: pointer; outline: none;
+    }
+
+    #nav-row {
+      display: flex; gap: 8px; margin-top: 24px;
+      padding-top: 20px; border-top: 1px solid #1A1A1A; align-items: center;
+    }
+    .nav-btn {
+      background: #1E1E1E; border: 1px solid #242424; color: #777;
+      padding: 8px 16px; border-radius: 5px; cursor: pointer;
+      font-size: 11px; font-family: inherit; letter-spacing: .07em; text-transform: uppercase;
+    }
+    .nav-btn:disabled { background: #141414; color: #2A2A2A; cursor: default; }
+    #nav-counter { margin-left: auto; font-size: 11px; color: #333; }
+
+    #empty-state { color: #333; font-size: 13px; margin-top: 80px; text-align: center; }
+    #sidebar-empty { padding: 24px; font-size: 11px; color: #333; text-align: center; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo"><span>ERRORI</span> CHECKER</div>
+  <div id="header-controls">
+    <div id="progress-wrap">
+      <div id="bar-track"><div id="bar-fill"></div></div>
+      <span id="pct-text">0%</span>
+      <span id="total-text">0/0</span>
+    </div>
+    <span id="file-name"></span>
+    <button class="hbtn" id="export-btn">↓ Export</button>
+    <button class="hbtn" id="reset-btn" style="color:#4A2020;border-color:#2A1A1A">Reset</button>
+  </div>
+  <label style="cursor:pointer">
+    <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" />
+    <span class="hbtn primary" id="load-btn-label">Carica xlsx</span>
+  </label>
+</div>
+
+<!-- BODY -->
+<div id="body">
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="sidebar-top">
+      <input id="search-input" placeholder="Cerca ID catalogo…" />
+      <div id="filter-row">
+        <button class="filter-btn active" data-filter="all">Tutti</button>
+        <button class="filter-btn" data-filter="incomplete">Da fare</button>
+        <button class="filter-btn" data-filter="complete">Fatti</button>
+      </div>
+    </div>
+    <div id="catalog-list"></div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="upload-zone">
+      <div class="upload-icon">📋</div>
+      <div class="upload-title">Errori Checker</div>
+      <div class="upload-sub">
+        Carica il file <strong>Errori_table_normalizado.xlsx</strong><br/>
+        generato dallo script di normalizzazione.<br/>
+        I progressi vengono salvati automaticamente nel browser.
+      </div>
+      <label>
+        <input type="file" id="file-input-2" accept=".xlsx,.xls" style="display:none" />
+        <span class="upload-btn">Scegli file .xlsx</span>
+      </label>
+    </div>
+    <div id="cat-view" style="display:none">
+      <div id="cat-header">
+        <div>
+          <div id="cat-title"></div>
+          <div id="cat-sub"></div>
+        </div>
+      </div>
+      <div id="error-list"></div>
+      <div id="nav-row">
+        <button class="nav-btn" id="prev-btn">← Prec.</button>
+        <button class="nav-btn" id="next-btn">Succ. →</button>
+        <span id="nav-counter"></span>
+      </div>
+    </div>
+    <div id="empty-state" style="display:none">Seleziona un catalogo dalla lista</div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'errori_checks_v2';
+const STATUS_LABELS = { pending:'Pendente', reviewing:'In revisione…', done:'Fatto ✓', impossible:'Non eseguibile' };
+const STATUS_BADGE  = { pending:'badge-pending', reviewing:'badge-reviewing', done:'badge-done', impossible:'badge-impossible' };
+const DOT_COLORS    = { pending:'#F59E0B', reviewing:'#6366F1', done:'#86EFAC', impossible:'#DC2626' };
+
+let catalogs = [];
+let checks   = {};
+let selected = null;
+let search   = '';
+let filter   = 'all';
+
+// Load saved checks
+try { const s = localStorage.getItem(STORAGE_KEY); if (s) checks = JSON.parse(s); } catch {}
+
+function saveChecks() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(checks)); } catch {}
+}
+
+function getStatus(id, i) { return checks[`${id}__${i}`] || 'pending'; }
+function setStatus(id, i, val) { checks[`${id}__${i}`] = val; saveChecks(); refresh(); }
+
+function getProgress(cat) {
+  const done = cat.errors.filter((_, i) => getStatus(cat.id, i) === 'done').length;
+  return { done, total: cat.errors.length };
+}
+
+function getFiltered() {
+  return catalogs.filter(c => {
+    if (search && !c.id.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filter !== 'all') {
+      const {done, total} = getProgress(c);
+      if (filter === 'complete'   && done !== total) return false;
+      if (filter === 'incomplete' && done === total) return false;
+    }
+    return true;
+  });
+}
+
+function refresh() {
+  const filtered = getFiltered();
+  const totalDone = catalogs.reduce((a,c) => a + getProgress(c).done, 0);
+  const totalAll  = catalogs.reduce((a,c) => a + c.errors.length, 0);
+  const pct = totalAll > 0 ? Math.round(totalDone/totalAll*100) : 0;
+
+  // header progress
+  document.getElementById('bar-fill').style.width = pct + '%';
+  document.getElementById('pct-text').textContent  = pct + '%';
+  document.getElementById('total-text').textContent = `${totalDone}/${totalAll}`;
+
+  // sidebar list
+  const list = document.getElementById('catalog-list');
+  list.innerHTML = '';
+  if (filtered.length === 0) {
+    list.innerHTML = '<div id="sidebar-empty">Nessun risultato</div>';
+  }
+  filtered.forEach(cat => {
+    const {done, total} = getProgress(cat);
+    const div = document.createElement('div');
+    div.className = 'cat-item' + (cat.id === selected ? ' active' : '');
+    div.innerHTML = `
+      <div class="cat-id">${cat.id}</div>
+      <div class="cat-mini">
+        <div class="mini-dots">${cat.errors.map((_,i) =>
+          `<span class="dot" style="background:${DOT_COLORS[getStatus(cat.id,i)]}"></span>`
+        ).join('')}</div>
+        <span class="cat-count">${done}/${total}</span>
+      </div>`;
+    div.addEventListener('click', () => { selected = cat.id; refresh(); });
+    list.appendChild(div);
+  });
+
+  // main panel
+  const catView    = document.getElementById('cat-view');
+  const uploadZone = document.getElementById('upload-zone');
+  const emptyState = document.getElementById('empty-state');
+
+  if (catalogs.length === 0) {
+    uploadZone.style.display = '';
+    catView.style.display = 'none';
+    emptyState.style.display = 'none';
+    return;
+  }
+  uploadZone.style.display = 'none';
+
+  const cat = catalogs.find(c => c.id === selected);
+  if (!cat) { catView.style.display='none'; emptyState.style.display=''; return; }
+
+  emptyState.style.display = 'none';
+  catView.style.display = '';
+
+  const {done: cDone, total: cTotal} = getProgress(cat);
+  document.getElementById('cat-title').textContent = cat.id;
+  document.getElementById('cat-sub').textContent   = `${cDone} / ${cTotal} errori controllati · ${filtered.length} cataloghi visibili`;
+
+  const errList = document.getElementById('error-list');
+  errList.innerHTML = '';
+  cat.errors.forEach((err, i) => {
+    const status = getStatus(cat.id, i);
+    const card = document.createElement('div');
+    card.className = 'error-card' + (status==='done'?' done':'');
+    card.innerHTML = `
+      <div class="err-num">${i+1}</div>
+      <div class="err-text${status==='done'?' done':''}">${escHtml(err)}</div>
+      <div class="status-col">
+        <div class="status-badge ${STATUS_BADGE[status]}">${STATUS_LABELS[status]}</div>
+        <select class="status-select" data-idx="${i}">
+          <option value="pending"   ${status==='pending'   ?'selected':''}>Pendente</option>
+          <option value="reviewing" ${status==='reviewing' ?'selected':''}>In revisione</option>
+          <option value="done"      ${status==='done'      ?'selected':''}>Fatto ✓</option>
+          <option value="impossible"${status==='impossible'?'selected':''}>Non eseguibile</option>
+        </select>
+      </div>`;
+    card.querySelector('select').addEventListener('change', e => {
+      setStatus(cat.id, parseInt(e.target.dataset.idx), e.target.value);
+    });
+    errList.appendChild(card);
+  });
+
+  // navigation
+  const currentIdx = filtered.findIndex(c => c.id === selected);
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+  prevBtn.disabled = currentIdx <= 0;
+  nextBtn.disabled = currentIdx >= filtered.length-1;
+  prevBtn.onclick = () => { selected = filtered[currentIdx-1].id; refresh(); document.getElementById('main').scrollTop=0; };
+  nextBtn.onclick = () => { selected = filtered[currentIdx+1].id; refresh(); document.getElementById('main').scrollTop=0; };
+  document.getElementById('nav-counter').textContent = `${currentIdx+1} / ${filtered.length}`;
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function loadFile(file) {
+  if (!file) return;
+  document.getElementById('file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const wb = XLSX.read(evt.target.result, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws, {defval:''});
+    catalogs = data.map(row => {
+      const id = String(row['id']||'').trim();
+      const errors = Object.keys(row)
+        .filter(k => k.startsWith('errore_'))
+        .sort((a,b) => parseInt(a.split('_')[1])-parseInt(b.split('_')[1]))
+        .map(k => String(row[k]||'').trim())
+        .filter(Boolean);
+      return {id, errors};
+    }).filter(c => c.id && c.errors.length>0);
+
+    selected = catalogs[0]?.id || null;
+    document.getElementById('sidebar').classList.add('visible');
+    document.getElementById('header-controls').style.display = 'flex';
+    document.getElementById('load-btn-label').textContent = '↺ Ricarica';
+    refresh();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// file inputs
+document.getElementById('file-input').addEventListener('change', e => loadFile(e.target.files[0]));
+document.getElementById('file-input-2').addEventListener('change', e => loadFile(e.target.files[0]));
+
+// search & filter
+document.getElementById('search-input').addEventListener('input', e => { search = e.target.value; refresh(); });
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    filter = btn.dataset.filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    refresh();
+  });
+});
+
+// export
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (!catalogs.length) return;
+  const rows = [];
+  catalogs.forEach(c => c.errors.forEach((err,i) => rows.push({
+    Catalogo: c.id, Errore: err, Status: STATUS_LABELS[getStatus(c.id,i)]
+  })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Log');
+  XLSX.writeFile(wb, 'errori_log.xlsx');
+  const btn = document.getElementById('export-btn');
+  btn.textContent = 'Esportato!';
+  setTimeout(() => btn.textContent='↓ Export', 2500);
+});
+
+// reset
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (!confirm('Azzerare tutti i check? Azione irreversibile.')) return;
+  checks = {}; saveChecks(); refresh();
+});
+
+refresh();
+</script>
+</body>
 </html>
